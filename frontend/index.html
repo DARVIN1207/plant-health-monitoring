@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Health Monitoring - Login</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo-section">
+                <h1>🌱 Plant Health Monitoring</h1>
+                <p>Smart Farming Dashboard</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter your username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Enter your password">
+                </div>
+                <button type="submit" class="btn btn-primary">Login</button>
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+            </form>
+            <div class="demo-credentials">
+                <p><strong>Demo Credentials:</strong></p>
+                <p>Farmer: <code>farmer001 / pwd001</code></p>
+                <p>Agronomist: <code>agro01 / pass01</code></p>
+            </div>
+        </div>
+    </div>
+    <script src="js/api.js"></script>
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const errorMessage = document.getElementById('errorMessage');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMessage.style.display = 'none';
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await api.login(username, password);
+                localStorage.setItem('token', response.token);
+                localStorage.setItem('user', JSON.stringify(response.user));
+
+                // Redirect based on role
+                if (response.user.role === 'farmer') {
+                    window.location.href = 'pages/farmer_dashboard.html';
+                } else {
+                    window.location.href = 'pages/agronomist_dashboard.html';
+                }
+            } catch (error) {
+                errorMessage.textContent = error.message || 'Login failed. Please check your credentials.';
+                errorMessage.style.display = 'block';
+            }
+        });
+
+        // Check if already logged in
+        const token = localStorage.getItem('token');
+        const userStr = localStorage.getItem('user');
+        if (token && userStr) {
+            const user = JSON.parse(userStr);
+            if (user.role === 'farmer') {
+                window.location.href = 'pages/farmer_dashboard.html';
+            } else {
+                window.location.href = 'pages/agronomist_dashboard.html';
+            }
+        }
+    </script>
+</body>
+</html>
+

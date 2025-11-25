@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agronomist Dashboard - Plant Health Monitoring</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>🌱 Agronomist Dashboard</h1>
+            <div class="header-info">
+                <div class="user-info">
+                    <span id="userName"></span>
+                </div>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <ul class="nav-links">
+                <li><a href="agronomist_dashboard.html" class="active">Plants</a></li>
+            </ul>
+        </nav>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Plant Management</h2>
+                <button class="btn btn-primary" onclick="showAddPlantForm()">+ Add New Plant</button>
+            </div>
+
+            <div class="search-filters">
+                <div class="search-input">
+                    <input type="text" id="searchInput" placeholder="Search plants by name, farmer, or notes..." oninput="filterPlants()">
+                </div>
+                <select class="filter-select" id="speciesFilter" onchange="filterPlants()">
+                    <option value="">All Species</option>
+                </select>
+                <select class="filter-select" id="locationFilter" onchange="filterPlants()">
+                    <option value="">All Locations</option>
+                </select>
+            </div>
+
+            <div id="plantList" class="plant-list">
+                <div class="loading">Loading plants...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Plant Modal -->
+    <div id="plantModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
+        <div style="max-width: 600px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px;">
+            <h2 id="modalTitle">Add New Plant</h2>
+            <form id="plantForm" onsubmit="savePlant(event)">
+                <div class="form-group">
+                    <label for="plant_name">Plant Name *</label>
+                    <input type="text" id="plant_name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="species">Species *</label>
+                        <input type="text" id="species" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="age_days">Age (Days) *</label>
+                        <input type="number" id="age_days" required min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="location">Location *</label>
+                        <input type="text" id="location" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="farmer_name">Farmer Name *</label>
+                        <input type="text" id="farmer_name" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="notes">Notes</label>
+                    <textarea id="notes" rows="3"></textarea>
+                </div>
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePlantModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let allPlants = [];
+        let editingPlantId = null;
+
+        if (!checkAuth()) {
+            // Redirect handled by checkAuth
+        }
+
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (user.role !== 'agronomist') {
+            alert('Access denied. Agronomist role required.');
+            window.location.href = 'farmer_dashboard.html';
+        }
+
+        document.getElementById('userName').textContent = `Welcome, ${user.name}`;
+
+        async function loadPlants() {
+            try {
+                allPlants = await api.getPlants();
+                displayPlants(allPlants);
+                populateFilters();
+            } catch (error) {
+                console.error('Error loading plants:', error);
+                document.getElementById('plantList').innerHTML = '<p>Failed to load plants. Please try again.</p>';
+            }
+        }
+
+        function displayPlants(plants) {
+            const plantList = document.getElementById('plantList');
+            if (plants.length === 0) {
+                plantList.innerHTML = '<p>No plants found.</p>';
+                return;
+            }
+
+            plantList.innerHTML = plants.map(plant => `
+                <div class="plant-card" onclick="viewPlant(${plant.plant_id})">
+                    <h3>${plant.plant_name}</h3>
+                    <div class="plant-info">
+                        <div><strong>Species:</strong> ${plant.species}</div>
+                        <div><strong>Age:</strong> ${plant.age_days} days</div>
+                        <div><strong>Location:</strong> ${plant.location}</div>
+                        <div><strong>Farmer:</strong> ${plant.farmer_name}</div>
+                        ${plant.notes ? `<div><strong>Notes:</strong> ${plant.notes}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function populateFilters() {
+            const species = [...new Set(allPlants.map(p => p.species))].sort();
+            const locations = [...new Set(allPlants.map(p => p.location))].sort();
+
+            const speciesFilter = document.getElementById('speciesFilter');
+            species.forEach(s => {
+                const option = document.createElement('option');
+                option.value = s;
+                option.textContent = s;
+                speciesFilter.appendChild(option);
+            });
+
+            const locationFilter = document.getElementById('locationFilter');
+            locations.forEach(l => {
+                const option = document.createElement('option');
+                option.value = l;
+                option.textContent = l;
+                locationFilter.appendChild(option);
+            });
+        }
+
+        function filterPlants() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const species = document.getElementById('speciesFilter').value;
+            const location = document.getElementById('locationFilter').value;
+
+            const filtered = allPlants.filter(plant => {
+                const matchesSearch = !search || 
+                    plant.plant_name.toLowerCase().includes(search) ||
+                    plant.farmer_name.toLowerCase().includes(search) ||
+                    (plant.notes && plant.notes.toLowerCase().includes(search));
+                const matchesSpecies = !species || plant.species === species;
+                const matchesLocation = !location || plant.location === location;
+                return matchesSearch && matchesSpecies && matchesLocation;
+            });
+
+            displayPlants(filtered);
+        }
+
+        function viewPlant(plantId) {
+            window.location.href = `plant_detail.html?id=${plantId}`;
+        }
+
+        function showAddPlantForm() {
+            editingPlantId = null;
+            document.getElementById('modalTitle').textContent = 'Add New Plant';
+            document.getElementById('plantForm').reset();
+            document.getElementById('plantModal').style.display = 'block';
+        }
+
+        function showEditPlantForm(plant) {
+            editingPlantId = plant.plant_id;
+            document.getElementById('modalTitle').textContent = 'Edit Plant';
+            document.getElementById('plant_name').value = plant.plant_name;
+            document.getElementById('species').value = plant.species;
+            document.getElementById('age_days').value = plant.age_days;
+            document.getElementById('location').value = plant.location;
+            document.getElementById('farmer_name').value = plant.farmer_name;
+            document.getElementById('notes').value = plant.notes || '';
+            document.getElementById('plantModal').style.display = 'block';
+        }
+
+        function closePlantModal() {
+            document.getElementById('plantModal').style.display = 'none';
+            editingPlantId = null;
+        }
+
+        async function savePlant(event) {
+            event.preventDefault();
+            
+            const plantData = {
+                plant_name: document.getElementById('plant_name').value,
+                species: document.getElementById('species').value,
+                age_days: parseInt(document.getElementById('age_days').value),
+                location: document.getElementById('location').value,
+                farmer_name: document.getElementById('farmer_name').value,
+                notes: document.getElementById('notes').value
+            };
+
+            try {
+                if (editingPlantId) {
+                    await api.updatePlant(editingPlantId, plantData);
+                } else {
+                    await api.createPlant(plantData);
+                }
+                closePlantModal();
+                loadPlants();
+            } catch (error) {
+                alert('Failed to save plant: ' + error.message);
+            }
+        }
+
+        loadPlants();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farmer Dashboard - Plant Health Monitoring</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>🌱 Farmer Dashboard</h1>
+            <div class="header-info">
+                <div class="user-info">
+                    <span id="userName"></span>
+                </div>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <nav class="nav">
+            <ul class="nav-links">
+                <li><a href="farmer_dashboard.html" class="active">Dashboard</a></li>
+                <li><a href="farmer_recommendations.html">Recommendations</a></li>
+            </ul>
+        </nav>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Plant Selection</h2>
+            </div>
+            <div class="form-group">
+                <label for="plantSelect">Select Plant to View</label>
+                <select id="plantSelect">
+                    <option value="">Loading plants...</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="chartsSection" style="display: none;">
+            <div class="charts-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Soil Moisture Trend (7 Days)</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="moistureChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Temperature Trend</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="temperatureChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Nutrient Levels (NPK)</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="nutrientChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Growth Height</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="growthChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Disease Risk Gauge</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="diseaseChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Plant Vitals Overview</h3>
+                    </div>
+                    <div id="vitalsOverview" class="plant-detail-info"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loadingMessage" class="loading">
+            <p>Select a plant to view dashboard</p>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let charts = {};
+        let selectedPlantId = null;
+
+        // Check authentication
+        if (!checkAuth()) {
+            // Redirect handled by checkAuth
+        }
+
+        const user = JSON.parse(localStorage.getItem('user'));
+        document.getElementById('userName').textContent = `Welcome, ${user.name}`;
+
+        // Load plants dropdown
+        async function loadPlants() {
+            try {
+                const plants = await api.getPlants();
+                const select = document.getElementById('plantSelect');
+                select.innerHTML = '<option value="">Select a plant...</option>';
+                
+                plants.forEach(plant => {
+                    const option = document.createElement('option');
+                    option.value = plant.plant_id;
+                    option.textContent = `${plant.plant_name} - ${plant.species} (${plant.location})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading plants:', error);
+                alert('Failed to load plants. Please try again.');
+            }
+        }
+
+        // Plant selection handler
+        document.getElementById('plantSelect').addEventListener('change', async (e) => {
+            selectedPlantId = e.target.value;
+            if (selectedPlantId) {
+                await loadPlantDashboard(selectedPlantId);
+            } else {
+                document.getElementById('chartsSection').style.display = 'none';
+                document.getElementById('loadingMessage').style.display = 'block';
+            }
+        });
+
+        // Load dashboard data
+        async function loadPlantDashboard(plantId) {
+            document.getElementById('loadingMessage').style.display = 'none';
+            document.getElementById('chartsSection').style.display = 'block';
+
+            try {
+                const [plant, logs, vitals] = await Promise.all([
+                    api.getPlant(plantId),
+                    api.getHealthLogs(plantId, 7),
+                    api.getHealthLogs(plantId, 1)
+                ]);
+
+                // Sort logs by date
+                logs.sort((a, b) => new Date(a.log_date) - new Date(b.log_date));
+
+                // Display vitals overview
+                if (vitals.length > 0) {
+                    const latest = vitals[0];
+                    document.getElementById('vitalsOverview').innerHTML = `
+                        <div class="info-item">
+                            <label>Soil Moisture</label>
+                            <value>${latest.soil_moisture}%</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Soil pH</label>
+                            <value>${latest.soil_ph}</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Temperature</label>
+                            <value>${latest.temperature}°C</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Humidity</label>
+                            <value>${latest.humidity}%</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Sunlight</label>
+                            <value>${latest.sunlight_lux} lux</value>
+                        </div>
+                        <div class="info-item">
+                            <label>Disease Risk</label>
+                            <value>${latest.disease_risk}%</value>
+                        </div>
+                    `;
+                }
+
+                // Create charts
+                createMoistureChart(logs);
+                createTemperatureChart(logs);
+                createNutrientChart(logs);
+                createGrowthChart(logs);
+                createDiseaseChart(vitals[0] || logs[logs.length - 1]);
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                alert('Failed to load dashboard data. Please try again.');
+            }
+        }
+
+        function createMoistureChart(logs) {
+            const ctx = document.getElementById('moistureChart').getContext('2d');
+            if (charts.moisture) charts.moisture.destroy();
+
+            charts.moisture = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: logs.map(log => new Date(log.log_date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Soil Moisture (%)',
+                        data: logs.map(log => log.soil_moisture),
+                        borderColor: '#4a7c2f',
+                        backgroundColor: 'rgba(74, 124, 47, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+        function createTemperatureChart(logs) {
+            const ctx = document.getElementById('temperatureChart').getContext('2d');
+            if (charts.temperature) charts.temperature.destroy();
+
+            charts.temperature = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: logs.map(log => new Date(log.log_date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Temperature (°C)',
+                        data: logs.map(log => log.temperature),
+                        borderColor: '#ff9800',
+                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+        function createNutrientChart(logs) {
+            const ctx = document.getElementById('nutrientChart').getContext('2d');
+            if (charts.nutrient) charts.nutrient.destroy();
+
+            const latest = logs[logs.length - 1];
+            charts.nutrient = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Nitrogen (N)', 'Phosphorus (P)', 'Potassium (K)'],
+                    datasets: [{
+                        label: 'Nutrient Levels',
+                        data: [latest.nutrient_n, latest.nutrient_p, latest.nutrient_k],
+                        backgroundColor: ['#4a7c2f', '#8bc34a', '#6ba84f']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function createGrowthChart(logs) {
+            const ctx = document.getElementById('growthChart').getContext('2d');
+            if (charts.growth) charts.growth.destroy();
+
+            charts.growth = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: logs.map(log => new Date(log.log_date).toLocaleDateString()),
+                    datasets: [{
+                        label: 'Growth Height (cm)',
+                        data: logs.map(log => log.growth_height_cm),
+                        borderColor: '#2196f3',
+                        backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    }
+                }
+            });
+        }
+
+        function createDiseaseChart(latestLog) {
+            const ctx = document.getElementById('diseaseChart').getContext('2d');
+            if (charts.disease) charts.disease.destroy();
+
+            const risk = latestLog ? latestLog.disease_risk : 0;
+            const color = risk < 30 ? '#4caf50' : risk < 70 ? '#ff9800' : '#f44336';
+
+            charts.disease = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Disease Risk', 'Healthy'],
+                    datasets: [{
+                        data: [risk, 100 - risk],
+                        backgroundColor: [color, '#e0e0e0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                        title: {
+                            display: true,
+                            text: `${risk}% Risk`,
+                            font: { size: 20 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize
+        loadPlants();
+    </script>
+</body>
+</html>
+
