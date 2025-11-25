@@ -106,3 +106,4 @@ router.put('/:id', authenticateToken, requireAgronomist, async (req, res) => {
 
 module.exports = router;
 
+

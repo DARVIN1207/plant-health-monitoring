@@ -74,3 +74,4 @@ router.post('/:plant_id', authenticateToken, requireAgronomist, async (req, res)
 
 module.exports = router;
 
+

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const authRoutes = require('./routes/auth');
 const plantRoutes = require('./routes/plants');
@@ -37,8 +38,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Check if database exists before starting
+const dbPath = path.join(__dirname, 'database', 'plant_monitoring.db');
+
+if (!fs.existsSync(dbPath)) {
+  console.warn('⚠️  Warning: Database not found. Please run "npm run init-db" first.');
+  console.warn('   Server will start, but database operations will fail.');
+}
+
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Frontend available at http://localhost:${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`✅ Frontend available at http://localhost:${PORT}`);
+  console.log(`\n📝 To initialize database, run: npm run init-db`);
 });
+
 

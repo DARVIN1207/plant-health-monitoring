@@ -133,7 +133,12 @@ db.serialize(() => {
     }));
   }
 
-  Promise.all(agronomistPromises).then((agronomistIds) => {
+  Promise.all(agronomistPromises).catch((err) => {
+    console.error('Error creating agronomists:', err);
+    db.close();
+    process.exit(1);
+  }).then((agronomistIds) => {
+    if (!agronomistIds) return;
     console.log(`Created ${agronomistIds.length} agronomists`);
 
     // Seed plants (200 plants)
@@ -169,7 +174,12 @@ db.serialize(() => {
       }));
     }
 
-    Promise.all(plantPromises).then((plantIds) => {
+    return Promise.all(plantPromises).catch((err) => {
+      console.error('Error creating plants:', err);
+      db.close();
+      process.exit(1);
+    }).then((plantIds) => {
+      if (!plantIds) return;
       console.log(`Created ${plantIds.length} plants`);
 
       // Seed health logs (7-14 days per plant)
@@ -214,7 +224,11 @@ db.serialize(() => {
         }
       });
 
-      Promise.all(logPromises).then(() => {
+      return Promise.all(logPromises).catch((err) => {
+        console.error('Error creating health logs:', err);
+        db.close();
+        process.exit(1);
+      }).then(() => {
         console.log('Created health logs');
 
         // Seed recommendations (random recommendations per plant)
@@ -251,7 +265,11 @@ db.serialize(() => {
           }
         });
 
-        Promise.all(recPromises).then(() => {
+        return Promise.all(recPromises).catch((err) => {
+          console.error('Error creating recommendations:', err);
+          db.close();
+          process.exit(1);
+        }).then(() => {
           console.log('Created recommendations');
 
           // Seed alerts (random alerts for some plants)
@@ -286,7 +304,11 @@ db.serialize(() => {
             }
           });
 
-          Promise.all(alertPromises).then(() => {
+          return Promise.all(alertPromises).catch((err) => {
+            console.error('Error creating alerts:', err);
+            db.close();
+            process.exit(1);
+          }).then(() => {
             console.log('Created alerts');
             
             // Create demo farmer account (hashed password)
@@ -317,4 +339,31 @@ db.serialize(() => {
     });
   });
 });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  if (db) {
+    db.close((err) => {
+      if (err) console.error('Error closing database:', err);
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  if (db) {
+    db.close((closeErr) => {
+      if (closeErr) console.error('Error closing database:', closeErr);
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
+});
+
 
